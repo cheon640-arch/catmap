@@ -36,6 +36,7 @@ const starterCats: MapCat[] = [
 ];
 
 type Tab = 'map' | 'cats' | 'report' | 'gallery' | 'profile' | 'mine' | 'myPage';
+type AuthMode = 'login' | 'signup';
 type DbPhoto = { id: string; photo_url: string; caption: string; spotted_at: string; uploader_name: string };
 type DbCat = { id: string; name: string; place: string; note: string; spotted_by: string; spotted_at: string; lat: number; lng: number; coat: CatCoat; cover_photo_url: string | null; personality?: string; likes?: string; favorite_spot?: string; caution?: string; cat_photos?: DbPhoto[] };
 
@@ -76,8 +77,11 @@ export default function Home() {
   const [notice, setNotice] = useState('');
   const [showLocationConsent, setShowLocationConsent] = useState(false);
   const [user, setUser] = useState<User | null>(null);
-  const [authEmail, setAuthEmail] = useState('');
-  const [authSent, setAuthSent] = useState(false);
+  const [authReady, setAuthReady] = useState(!hasSupabaseConfig);
+  const [authMode, setAuthMode] = useState<AuthMode>('login');
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authMessage, setAuthMessage] = useState('');
+  const [authError, setAuthError] = useState('');
   const [myName, setMyName] = useState('고양이 친구');
   const [myBio, setMyBio] = useState('부산대 고양이들을 조용히 지켜보고 있어요.');
   const [saving, setSaving] = useState(false);
@@ -114,14 +118,15 @@ export default function Home() {
       }
       return;
     }
-    void supabase.auth.getUser().then(({ data }) => setUser(data.user));
+    const client = supabase;
+    void client.auth.getSession().then(({ data }) => { setUser(data.session?.user ?? null); setAuthReady(true); }).catch(() => setAuthReady(true));
     void loadSharedCats().catch(() => setNotice('공유 데이터를 불러오지 못했어요. DB 설정을 확인해 주세요.'));
-    const authListener = supabase.auth.onAuthStateChange((_event, session) => setUser(session?.user ?? null));
-    const live = supabase.channel('nyangdo-live')
+    const authListener = client.auth.onAuthStateChange((_event, session) => { setUser(session?.user ?? null); setAuthReady(true); });
+    const live = client.channel('nyangdo-live')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'cats' }, () => void loadSharedCats())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'cat_photos' }, () => void loadSharedCats())
       .subscribe();
-    return () => { authListener.data.subscription.unsubscribe(); void supabase.removeChannel(live); };
+    return () => { authListener.data.subscription.unsubscribe(); void client.removeChannel(live); };
   }, [loadSharedCats]);
 
   useEffect(() => { if (!hasSupabaseConfig) localStorage.setItem('nyangdo-pnu-v2', JSON.stringify(cats)); }, [cats]);
@@ -198,7 +203,7 @@ export default function Home() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (hasSupabaseConfig && !user) { flash('고양이를 등록하려면 먼저 로그인해 주세요.'); setTab('mine'); return; }
+    if (hasSupabaseConfig && !user) { flash('고양이를 등록하려면 먼저 로그인해 주세요.'); setTab('myPage'); return; }
     const form = event.currentTarget;
     const data = new FormData(form);
     const name = String(data.get('name')).trim();
@@ -230,7 +235,7 @@ export default function Home() {
     const files = Array.from(event.target.files ?? []).slice(0, 12);
     if (!selected || !files.length) return;
     if (files.some((file) => file.size > 5_000_000)) return flash('사진은 한 장당 5MB 이하로 골라 주세요.');
-    if (hasSupabaseConfig && !user) { flash('사진을 올리려면 먼저 로그인해 주세요.'); setTab('mine'); return; }
+    if (hasSupabaseConfig && !user) { flash('사진을 올리려면 먼저 로그인해 주세요.'); setTab('myPage'); return; }
     setGalleryUploading(true);
     try {
       const uploader = user?.email?.split('@')[0] || '나';
@@ -243,17 +248,51 @@ export default function Home() {
     finally { setGalleryUploading(false); event.target.value = ''; }
   };
 
-  const sendMagicLink = async (event: FormEvent<HTMLFormElement>) => {
+  const handleAuth = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!supabase) return;
-    const { error } = await supabase.auth.signInWithOtp({ email: authEmail, options: { emailRedirectTo: window.location.origin } });
-    if (error) flash('로그인 메일을 보내지 못했어요.'); else setAuthSent(true);
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const email = String(data.get('email')).trim();
+    const password = String(data.get('password'));
+    const displayName = String(data.get('displayName')).trim();
+    const passwordConfirm = String(data.get('passwordConfirm'));
+    setAuthBusy(true);
+    setAuthError('');
+    setAuthMessage('');
+    try {
+      if (authMode === 'signup') {
+        if (password.length < 8) throw new Error('비밀번호는 8자 이상으로 만들어 주세요.');
+        if (password !== passwordConfirm) throw new Error('비밀번호가 서로 달라요.');
+        const { data: signedUp, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: { emailRedirectTo: window.location.origin, data: { display_name: displayName || email.split('@')[0] } },
+        });
+        if (error) throw error;
+        if (!signedUp.session) {
+          setAuthMessage(`${email}로 인증 메일을 보냈어요. 메일 속 링크를 누르면 가입이 완료돼요.`);
+          form.reset();
+        }
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+      if (/invalid login credentials/i.test(message)) setAuthError('이메일이나 비밀번호가 맞지 않아요.');
+      else if (/email not confirmed/i.test(message)) setAuthError('메일함에서 이메일 인증을 먼저 완료해 주세요.');
+      else if (/already registered|already exists/i.test(message)) setAuthError('이미 가입된 이메일이에요. 로그인해 주세요.');
+      else setAuthError(message || '처리하지 못했어요. 잠시 후 다시 시도해 주세요.');
+    } finally {
+      setAuthBusy(false);
+    }
   };
 
   const saveCatProfile = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selected) return;
-    if (hasSupabaseConfig && !user) { flash('프로필을 수정하려면 먼저 로그인해 주세요.'); setTab('mine'); return; }
+    if (hasSupabaseConfig && !user) { flash('프로필을 수정하려면 먼저 로그인해 주세요.'); setTab('myPage'); return; }
     const data = new FormData(event.currentTarget);
     const profile = {
       personality: String(data.get('personality')).trim(),
@@ -306,6 +345,32 @@ export default function Home() {
   const locateMe = () => { if (localStorage.getItem('nyangdo-location-choice') !== 'granted') return setShowLocationConsent(true); requestCurrentLocation(); };
   const chooseCat = (cat: MapCat) => { setSelected(cat); setFocusPosition([cat.lat, cat.lng]); setTab('map'); };
 
+  if (hasSupabaseConfig && !authReady) {
+    return <main className="app-shell auth-shell"><section className="auth-loading" aria-live="polite"><span className="auth-pixel-cat">=^･ω･^=</span><p>고양이 지도를 준비하고 있어요…</p></section></main>;
+  }
+
+  if (hasSupabaseConfig && !user) {
+    return (
+      <main className="app-shell auth-shell">
+        <section className="auth-gate" aria-labelledby="auth-title">
+          <div className="auth-shape auth-shape-one" aria-hidden="true" /><div className="auth-shape auth-shape-two" aria-hidden="true" />
+          <header className="auth-brand"><span className="auth-mascot" aria-hidden="true"><i>• ᴗ •</i></span><h1 id="auth-title">냥도</h1><p>부산대 고양이들의 오늘을<br />친구들과 함께 기록해요</p></header>
+          <div className="auth-card">
+            {authMessage ? <div className="auth-mail-sent" role="status"><span>✉</span><b>인증 메일을 확인해 주세요</b><p>{authMessage}</p><button type="button" onClick={() => { setAuthMode('login'); setAuthMessage(''); }}>인증 후 로그인하기</button></div> : <form className="auth-form" onSubmit={handleAuth}>
+              {authMode === 'signup' && <label className="auth-field"><span aria-hidden="true">♙</span><input required name="displayName" autoComplete="name" aria-label="닉네임" placeholder="닉네임" /></label>}
+              <label className="auth-field"><span aria-hidden="true">✉</span><input required name="email" type="email" autoComplete="email" aria-label="이메일" placeholder="이메일" /></label>
+              <label className="auth-field"><span aria-hidden="true">♙</span><input required name="password" type="password" minLength={8} autoComplete={authMode === 'login' ? 'current-password' : 'new-password'} aria-label="비밀번호" placeholder="비밀번호 (8자 이상)" /></label>
+              {authMode === 'signup' && <label className="auth-field"><span aria-hidden="true">✓</span><input required name="passwordConfirm" type="password" minLength={8} autoComplete="new-password" aria-label="비밀번호 확인" placeholder="비밀번호 확인" /></label>}
+              {authError && <p className="auth-error" role="alert">{authError}</p>}
+              <button className="auth-submit" disabled={authBusy} type="submit">{authBusy ? '잠시만요…' : authMode === 'login' ? '로그인' : '회원가입'} </button>
+            </form>}
+            {!authMessage && <p className="auth-switch">{authMode === 'login' ? '아직 계정이 없나요?' : '이미 계정이 있나요?'} <button type="button" onClick={() => { setAuthMode(authMode === 'login' ? 'signup' : 'login'); setAuthError(''); }}>{authMode === 'login' ? '회원가입' : '로그인'}</button></p>}
+          </div>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="app-shell">
       <section className="map-stage" aria-label="부산대학교 부산캠퍼스 고양이 위치 지도">
@@ -328,7 +393,7 @@ export default function Home() {
 
       {tab === 'mine' && <section className="overlay-panel about-panel record-panel"><div className="panel-heading"><div><small>MY RECORD</small><h1>내 기록</h1></div></div><div className="record-summary"><span>♧</span><div><b>{cats.length}마리</b><small>지금 지도에서 만나고 있어요</small></div><i>{cats.reduce((count, cat) => count + (cat.gallery?.length ?? 0), 0)} PHOTOS</i></div><h2 className="record-title">최근 고양이</h2><div className="cat-list">{cats.slice(0, 4).map((cat) => <button key={cat.id} className="cat-row" type="button" onClick={() => chooseCat(cat)}><img src={cat.photo} alt="" /><span><b>{cat.name}</b><small>⌖ {cat.place}</small></span><i>{formatSeen(cat.spottedAt)}</i></button>)}</div></section>}
 
-      {tab === 'myPage' && <section className="overlay-panel about-panel auth-panel my-page-panel"><div className="panel-heading"><div><small>MY PAGE</small><h1>마이페이지</h1></div></div>{hasSupabaseConfig && !user ? <div className="login-card"><span className="login-cat">=^･ω･^=</span><h2>같이 기록하려면 로그인</h2><p>학교 이메일을 입력하면 비밀번호 없이 로그인 링크를 보내드려요.</p>{authSent ? <div className="mail-sent"><b>메일함을 확인해 주세요!</b><span>{authEmail}</span></div> : <form onSubmit={sendMagicLink}><label><span>이메일</span><input required type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} placeholder="name@pusan.ac.kr" /></label><button type="submit">로그인 링크 받기 <span>↗</span></button></form>}</div> : <><div className="my-profile-card"><div className="my-avatar">{myName.slice(0, 1)}</div><div><small>{hasSupabaseConfig ? 'CONNECTED PROFILE' : 'LOCAL PROFILE'}</small><h2>{myName}</h2><p>{user?.email || '이 기기에 저장되는 미리보기 프로필'}</p></div></div><form className="my-profile-form" onSubmit={saveMyProfile}><label><span>닉네임</span><input name="displayName" defaultValue={myName} placeholder="지도에서 사용할 이름" /></label><label><span>한 줄 소개</span><textarea name="bio" rows={3} defaultValue={myBio} placeholder="고양이 친구들에게 나를 소개해 주세요" /></label><button type="submit">프로필 저장하기 <span>↗</span></button></form>{user && <button className="my-logout" type="button" onClick={() => void supabase?.auth.signOut()}>로그아웃</button>}</>}</section>}
+      {tab === 'myPage' && <section className="overlay-panel about-panel auth-panel my-page-panel"><div className="panel-heading"><div><small>MY PAGE</small><h1>마이페이지</h1></div></div><div className="my-profile-card"><div className="my-avatar">{myName.slice(0, 1)}</div><div><small>{hasSupabaseConfig ? 'VERIFIED MEMBER' : 'LOCAL PROFILE'}</small><h2>{myName}</h2><p>{user?.email || '이 기기에 저장되는 미리보기 프로필'}</p></div></div><form className="my-profile-form" onSubmit={saveMyProfile}><label><span>닉네임</span><input name="displayName" defaultValue={myName} placeholder="지도에서 사용할 이름" /></label><label><span>한 줄 소개</span><textarea name="bio" rows={3} defaultValue={myBio} placeholder="고양이 친구들에게 나를 소개해 주세요" /></label><button type="submit">프로필 저장하기 <span>↗</span></button></form>{user && <button className="my-logout" type="button" onClick={() => { setTab('map'); void supabase?.auth.signOut(); }}>로그아웃</button>}</section>}
 
       {showLocationConsent && <section className="consent-backdrop" role="dialog" aria-modal="true" aria-labelledby="location-consent-title"><div className="consent-card"><div className="consent-icon" aria-hidden="true">⌖</div><small>LOCATION INFO</small><h2 id="location-consent-title">내 주변 고양이를<br />찾아볼까요?</h2><p>현재 위치로 지도를 이동합니다. 위치는 저장하지 않으며, 고양이 등록은 부산캠퍼스 안에서만 가능해요.</p><div className="consent-points"><span><b>01</b> 지도 중심 이동에만 사용</span><span><b>02</b> 언제든 기기 설정에서 변경</span></div><button className="consent-accept" type="button" onClick={() => { localStorage.setItem('nyangdo-location-choice', 'granted'); setShowLocationConsent(false); requestCurrentLocation(); }}>동의하고 위치 보기 <span>↗</span></button><button className="consent-later" type="button" onClick={() => { localStorage.setItem('nyangdo-location-choice', 'later'); setShowLocationConsent(false); }}>나중에 할게요</button></div></section>}
 
