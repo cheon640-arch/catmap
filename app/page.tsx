@@ -70,7 +70,7 @@ async function filesToDataUrls(files: File[]) {
 
 export default function Home() {
   const [cats, setCats] = useState<MapCat[]>(starterCats);
-  const [selected, setSelected] = useState<MapCat | null>(starterCats[0]);
+  const [selected, setSelected] = useState<MapCat | null>(null);
   const [tab, setTab] = useState<Tab>('map');
   const [draftPoint, setDraftPoint] = useState<[number, number]>(PNU_CENTER);
   const [focusPosition, setFocusPosition] = useState<[number, number] | null>(null);
@@ -107,7 +107,7 @@ export default function Home() {
     if (error) throw error;
     const next = (data as DbCat[]).map(mapDbCat);
     setCats(next);
-    setSelected((current) => current ? next.find((cat) => cat.id === current.id) ?? next[0] ?? null : next[0] ?? null);
+    setSelected((current) => current ? next.find((cat) => cat.id === current.id) ?? null : null);
     return next;
   }, []);
 
@@ -124,7 +124,7 @@ export default function Home() {
               const gallery = cat.gallery?.length ? cat.gallery : photo ? [{ id: `${cat.id}-cover`, url: photo, spottedAt: cat.spottedAt, uploadedBy: cat.spottedBy }] : [];
               return { ...cat, photo, gallery };
             });
-            setCats(migrated); setSelected(migrated[0]);
+            setCats(migrated); setSelected(null);
           }
         } catch { /* Keep sample gallery when local draft data is unreadable. */ }
       }
@@ -206,6 +206,15 @@ export default function Home() {
   const cancelLocationSelection = () => {
     setIsChoosingLocation(false);
     setHasChosenLocation(false);
+  };
+
+  const cancelReport = () => {
+    setDraftFiles([]);
+    setDraftPhotos([]);
+    setSelected(null);
+    cancelLocationSelection();
+    setTab('map');
+    if (photoInput.current) photoInput.current.value = '';
   };
 
   const handlePhotos = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -430,7 +439,7 @@ export default function Home() {
   return (
     <main className="app-shell">
       <section className="map-stage" aria-label="부산대학교 부산캠퍼스 고양이 위치 지도">
-        <CatMap cats={cats} selectedId={selected?.id ?? null} onSelect={isChoosingLocation ? () => undefined : setSelected} onMapClick={chooseDraftLocation} focusPosition={focusPosition} draftPosition={isChoosingLocation && hasChosenLocation ? draftPoint : null} />
+        <CatMap cats={cats} selectedId={selected?.id ?? null} onSelect={isChoosingLocation ? () => undefined : setSelected} onMapClick={chooseDraftLocation} focusPosition={focusPosition} />
         <header className="floating-header"><div className="brand-pill"><span className="mini-cat">=^･ω･^=</span><div><b>meow map</b><small>{hasSupabaseConfig ? 'PNU CAT MAP' : 'LOCAL PREVIEW'}</small></div></div><button className="count-pill" type="button" onClick={() => setTab('cats')}><span>{cats.length}</span> 마리</button></header>
         <div className="map-actions"><button type="button" onClick={locateMe} aria-label="사용자의 현재 위치로 지도 이동">⌖</button></div>
         {isChoosingLocation && <><div className="location-picker-tip"><small>LOCATION PICKER</small><b>{hasChosenLocation ? '이 위치가 맞나요?' : '고양이를 발견한 곳을 눌러주세요'}</b></div><div className="location-picker-actions"><button type="button" onClick={cancelLocationSelection}>취소</button><button type="button" disabled={!hasChosenLocation} onClick={() => openReport(draftPoint[0], draftPoint[1])}>이 위치로 등록하기 <span>↗</span></button></div></>}
@@ -464,7 +473,7 @@ export default function Home() {
 
       {tab === 'profile' && selected && <section className="overlay-panel cat-profile-panel"><div className="panel-handle" /><div className="profile-panel-nav"><button type="button" onClick={() => setTab('map')} aria-label="지도와 설명으로 돌아가기">‹</button><span>프로필</span></div><div className={`profile-hero ${selected.photo ? '' : 'no-photo'}`}>{selected.photo && <img src={selected.photo} alt={`${selected.name} 프로필 사진`} />}<div><small>CAT PROFILE</small><h1>{selected.name}</h1><p>⌖ {selected.place}</p></div></div>{editingProfile ? <div className="profile-editor"><div className="profile-section-title"><div><small>EDIT PROFILE</small><h2>프로필 내용 작성</h2></div><button type="button" onClick={() => setEditingProfile(false)}>취소</button></div><form onSubmit={saveCatProfile}><label><span>성격과 특징</span><textarea name="personality" rows={3} defaultValue={selected.personality} placeholder="예: 느긋하고 사람을 잘 따라요" /></label><label><span>좋아하는 것</span><input name="likes" defaultValue={selected.likes} placeholder="예: 햇빛, 참치 간식, 벤치 밑" /></label><label><span>자주 있는 장소</span><input name="favoriteSpot" defaultValue={selected.favoriteSpot} placeholder="예: 중앙도서관 앞 벤치" /></label><label><span>다가갈 때 주의할 점</span><textarea name="caution" rows={2} defaultValue={selected.caution} placeholder="예: 낮잠 잘 때는 만지지 않기" /></label><p>친구들이 함께 참고할 수 있는 정보만 적어 주세요.</p><button type="submit">{selected.name} 프로필 저장하기 <span>↗</span></button></form></div> : <div className="profile-view"><div className="profile-section-title"><div><small>OUR NOTES</small><h2>친구들이 알려준 {selected.name}</h2></div><span>공동 작성</span></div><dl className="profile-facts"><div><dt>성격과 특징</dt><dd>{selected.personality || '아직 적힌 내용이 없어요.'}</dd></div><div><dt>좋아하는 것</dt><dd>{selected.likes || '아직 적힌 내용이 없어요.'}</dd></div><div><dt>자주 있는 장소</dt><dd>{selected.favoriteSpot || '아직 적힌 내용이 없어요.'}</dd></div><div><dt>다가갈 때 주의할 점</dt><dd>{selected.caution || '아직 적힌 내용이 없어요.'}</dd></div></dl><button className="profile-edit-button" type="button" onClick={() => setEditingProfile(true)}>내용 추가·수정하기 <span>＋</span></button></div>}</section>}
 
-      {tab === 'report' && <section className="overlay-panel report-panel"><div className="panel-heading"><div><small>NEW SIGHTING</small><h1>새 고양이 발견!</h1></div></div><form onSubmit={handleSubmit}><button type="button" className={`photo-uploader ${draftPhotos.length ? 'has-photo' : ''}`} onClick={() => photoInput.current?.click()}>{draftPhotos.length ? <div className="upload-preview-grid">{draftPhotos.slice(0, 4).map((photo, index) => <img key={photo} src={photo} alt={`선택한 사진 ${index + 1}`} />)}{draftPhotos.length > 4 && <b>+{draftPhotos.length - 4}</b>}</div> : <><span>＋</span><b>고양이 사진 여러 장 추가</b><small>한 번에 최대 8장</small></>}</button><input ref={photoInput} hidden type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={handlePhotos} /><div className="field-row"><label><span>이름</span><input required name="name" placeholder="예: 치즈" /></label><label><span>발견 장소</span><input required name="place" placeholder="예: 도서관 뒤" /></label></div><label><span>고양이 털색</span><select required name="coat" defaultValue="orange"><option value="gray">회색 고등어</option><option value="orange">치즈</option><option value="calico">삼색이</option><option value="black">검정 / 턱시도</option><option value="white">흰색</option></select></label><label><span>발견한 사람</span><input name="spottedBy" placeholder="별명도 좋아요" /></label><label><span>특징이나 메모</span><textarea name="note" rows={3} placeholder="성격, 생김새, 자주 보이는 시간…" /></label><p className="location-confirm">● 선택한 지도 위치와 오늘 날짜가 함께 저장돼요</p><button className="save-button" disabled={saving} type="submit">{saving ? '등록하는 중…' : '지도와 갤러리에 등록하기'} <span>↗</span></button></form></section>}
+      {tab === 'report' && <section className="overlay-panel report-panel"><div className="panel-heading"><div><small>NEW SIGHTING</small><h1>새 고양이 발견!</h1></div><button className="report-close" type="button" onClick={cancelReport} aria-label="고양이 등록 취소">×</button></div><form onSubmit={handleSubmit}><button type="button" className={`photo-uploader ${draftPhotos.length ? 'has-photo' : ''}`} onClick={() => photoInput.current?.click()}>{draftPhotos.length ? <div className="upload-preview-grid">{draftPhotos.slice(0, 4).map((photo, index) => <img key={photo} src={photo} alt={`선택한 사진 ${index + 1}`} />)}{draftPhotos.length > 4 && <b>+{draftPhotos.length - 4}</b>}</div> : <><span>＋</span><b>고양이 사진 여러 장 추가</b><small>한 번에 최대 8장</small></>}</button><input ref={photoInput} hidden type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={handlePhotos} /><div className="field-row"><label><span>이름</span><input required name="name" placeholder="예: 치즈" /></label><label><span>발견 장소</span><input required name="place" placeholder="예: 도서관 뒤" /></label></div><label><span>고양이 털색</span><select required name="coat" defaultValue="orange"><option value="gray">회색 고등어</option><option value="orange">치즈</option><option value="calico">삼색이</option><option value="black">검정 / 턱시도</option><option value="white">흰색</option></select></label><label><span>발견한 사람</span><input name="spottedBy" placeholder="별명도 좋아요" /></label><label><span>특징이나 메모</span><textarea name="note" rows={3} placeholder="성격, 생김새, 자주 보이는 시간…" /></label><p className="location-confirm">● 선택한 지도 위치와 오늘 날짜가 함께 저장돼요</p><button className="save-button" disabled={saving} type="submit">{saving ? '등록하는 중…' : '지도와 갤러리에 등록하기'} <span>↗</span></button></form></section>}
 
       {tab === 'mine' && <section className="overlay-panel about-panel record-panel"><div className="panel-heading"><div><small>MY RECORD</small><h1>내 기록</h1></div></div><div className="record-summary"><span>♧</span><div><b>{cats.length}마리</b><small>지금 지도에서 만나고 있어요</small></div><i>{cats.reduce((count, cat) => count + (cat.gallery?.length ?? 0), 0)} PHOTOS</i></div><h2 className="record-title">최근 고양이</h2><div className="cat-list">{cats.slice(0, 4).map((cat) => <button key={cat.id} className={`cat-row ${cat.photo ? '' : 'no-photo'}`} type="button" onClick={() => chooseCat(cat)}>{cat.photo && <img src={cat.photo} alt="" />}<span><b>{cat.name}</b><small>⌖ {cat.place}</small></span><i>{formatSeen(cat.spottedAt)}</i></button>)}</div></section>}
 

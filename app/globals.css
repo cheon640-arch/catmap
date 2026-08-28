@@ -198,6 +198,7 @@ button { cursor: pointer; }
 .cat-row small, .cat-row i { color: var(--muted); font-size: 12px; font-style: normal; }
 
 .report-panel form { display: grid; gap: 13px; }
+.report-close { display: grid; place-items: center; padding: 0 0 3px; line-height: 1; }
 .photo-uploader { min-height: 145px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; overflow: hidden; border: 1.5px dashed #e9a89e; border-radius: 19px; background: #fff3ef; color: var(--coral-deep); }
 .photo-uploader > span { font-size: 28px; } .photo-uploader b { font-size: 12px; } .photo-uploader small { color: #b8938c; font-size: 12px; }
 .photo-uploader.has-photo { height: 180px; padding: 0; border-style: solid; }
@@ -367,9 +368,6 @@ body, button, input, textarea {
 .location-picker-actions button { min-height: 44px; border: 2px solid var(--ink); border-radius: 5px; background: white; font: inherit; font-size: 12px; }
 .location-picker-actions button:last-child { background: var(--acid); }
 .location-picker-actions button:disabled { opacity: .45; }
-.draft-location-wrap { background: transparent; border: 0; }
-.draft-location-pin { position: relative; width: 38px; height: 38px; display: grid; place-items: center; border: 3px solid var(--ink); border-radius: 6px; background: var(--acid); box-shadow: 3px 3px 0 var(--ink); color: var(--ink); font-size: 23px; }
-.draft-location-pin::after { content: ""; position: absolute; left: 12px; bottom: -9px; width: 12px; height: 12px; border-right: 3px solid var(--ink); border-bottom: 3px solid var(--ink); background: var(--acid); transform: rotate(45deg); }
 .map-hint {
   top: 91px;
   border: 2px solid var(--ink);
