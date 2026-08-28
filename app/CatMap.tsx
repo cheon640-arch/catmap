@@ -15,7 +15,7 @@ export type MapCat = {
   spottedAt: string;
   lat: number;
   lng: number;
-  photo: string;
+  photo: string | null;
   coat?: CatCoat;
   gallery?: CatPhoto[];
   personality?: string;
@@ -30,6 +30,7 @@ export type CatPhoto = {
   id: string;
   url: string;
   spottedAt: string;
+  createdAt?: string;
   caption?: string;
   uploadedBy?: string;
 };

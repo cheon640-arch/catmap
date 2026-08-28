@@ -8,7 +8,7 @@ import { isInsidePnuCampus, PNU_CENTER } from './campus';
 import { hasSupabaseConfig, supabase } from '../lib/supabase';
 
 const CatMap = dynamic(() => import('./CatMap'), { ssr: false, loading: () => <div className="map-loading">지도를 불러오는 중…</div> });
-const DEFAULT_CAT_PHOTO = 'https://images.unsplash.com/photo-1518791841217-8f162f1e1131?auto=format&fit=crop&w=900&q=85';
+const LEGACY_DEFAULT_CAT_PHOTO = 'https://images.unsplash.com/photo-1518791841217-8f162f1e1131?auto=format&fit=crop&w=900&q=85';
 
 const starterCats: MapCat[] = [
   {
@@ -37,12 +37,15 @@ const starterCats: MapCat[] = [
 
 type Tab = 'map' | 'cats' | 'report' | 'gallery' | 'profile' | 'mine' | 'myPage';
 type AuthMode = 'login' | 'signup';
-type DbPhoto = { id: string; photo_url: string; caption: string; spotted_at: string; uploader_name: string };
+type DbPhoto = { id: string; photo_url: string; caption: string; spotted_at: string; uploader_name: string; created_at: string };
 type DbCat = { id: string; name: string; place: string; note: string; spotted_by: string; spotted_at: string; lat: number; lng: number; coat: CatCoat; cover_photo_url: string | null; personality?: string; likes?: string; favorite_spot?: string; caution?: string; cat_photos?: DbPhoto[] };
 
 function mapDbCat(row: DbCat): MapCat {
-  const gallery = (row.cat_photos ?? []).map((photo) => ({ id: photo.id, url: photo.photo_url, caption: photo.caption, spottedAt: photo.spotted_at, uploadedBy: photo.uploader_name })).sort((a, b) => b.spottedAt.localeCompare(a.spottedAt));
-  return { id: row.id, name: row.name, place: row.place, note: row.note, spottedBy: row.spotted_by, spottedAt: row.spotted_at, lat: row.lat, lng: row.lng, coat: row.coat, photo: row.cover_photo_url ?? gallery[0]?.url ?? DEFAULT_CAT_PHOTO, gallery, personality: row.personality ?? '', likes: row.likes ?? '', favoriteSpot: row.favorite_spot ?? '', caution: row.caution ?? '' };
+  const photos = (row.cat_photos ?? []).map((photo) => ({ id: photo.id, url: photo.photo_url, caption: photo.caption, spottedAt: photo.spotted_at, createdAt: photo.created_at, uploadedBy: photo.uploader_name }));
+  const gallery = [...photos].sort((a, b) => b.spottedAt.localeCompare(a.spottedAt));
+  const firstUploadedPhoto = [...photos].sort((a, b) => (a.createdAt || a.spottedAt).localeCompare(b.createdAt || b.spottedAt))[0];
+  const savedCover = row.cover_photo_url === LEGACY_DEFAULT_CAT_PHOTO ? null : row.cover_photo_url;
+  return { id: row.id, name: row.name, place: row.place, note: row.note, spottedBy: row.spotted_by, spottedAt: row.spotted_at, lat: row.lat, lng: row.lng, coat: row.coat, photo: savedCover ?? firstUploadedPhoto?.url ?? null, gallery, personality: row.personality ?? '', likes: row.likes ?? '', favoriteSpot: row.favorite_spot ?? '', caution: row.caution ?? '' };
 }
 
 function formatSeen(value: string) {
@@ -116,7 +119,11 @@ export default function Home() {
         try {
           const parsed = JSON.parse(saved) as MapCat[];
           if (Array.isArray(parsed) && parsed.length) {
-            const migrated = parsed.map((cat) => ({ ...cat, gallery: cat.gallery?.length ? cat.gallery : [{ id: `${cat.id}-cover`, url: cat.photo, spottedAt: cat.spottedAt, uploadedBy: cat.spottedBy }] }));
+            const migrated = parsed.map((cat) => {
+              const photo = cat.photo === LEGACY_DEFAULT_CAT_PHOTO ? null : cat.photo;
+              const gallery = cat.gallery?.length ? cat.gallery : photo ? [{ id: `${cat.id}-cover`, url: photo, spottedAt: cat.spottedAt, uploadedBy: cat.spottedBy }] : [];
+              return { ...cat, photo, gallery };
+            });
             setCats(migrated); setSelected(migrated[0]);
           }
         } catch { /* Keep sample gallery when local draft data is unreadable. */ }
@@ -221,7 +228,7 @@ export default function Home() {
       const photoId = crypto.randomUUID();
       const { error: insertError } = await supabase.from('cat_photos').insert({ id: photoId, cat_id: catId, photo_url: publicFile.publicUrl, storage_path: path, caption, spotted_at: spottedAt, uploaded_by: user.id, uploader_name: uploaderName });
       if (insertError) throw insertError;
-      uploaded.push({ id: photoId, url: publicFile.publicUrl, spottedAt, caption, uploadedBy: uploaderName });
+      uploaded.push({ id: photoId, url: publicFile.publicUrl, spottedAt, createdAt: spottedAt, caption, uploadedBy: uploaderName });
     }
     return uploaded;
   };
@@ -241,13 +248,13 @@ export default function Home() {
     setSaving(true);
     try {
       let gallery: CatPhoto[] = draftPhotos.map((url, index) => ({ id: `${catId}-${index}`, url, spottedAt, uploadedBy: spottedBy }));
-      let coverPhoto = gallery[0]?.url ?? DEFAULT_CAT_PHOTO;
+      let coverPhoto = gallery[0]?.url ?? null;
       if (supabase && user) {
         const { error } = await supabase.from('cats').insert({ id: catId, name, place, note, spotted_by: spottedBy, spotted_at: spottedAt, lat: draftPoint[0], lng: draftPoint[1], coat, cover_photo_url: null, created_by: user.id });
         if (error) throw error;
         gallery = await uploadFilesForCat(catId, draftFiles, spottedBy);
-        coverPhoto = gallery[0]?.url ?? DEFAULT_CAT_PHOTO;
-        await supabase.from('cats').update({ cover_photo_url: coverPhoto }).eq('id', catId);
+        coverPhoto = gallery[0]?.url ?? null;
+        if (coverPhoto) await supabase.from('cats').update({ cover_photo_url: coverPhoto }).eq('id', catId);
       }
       const cat: MapCat = { id: catId, name, place, note, spottedBy, spottedAt, lat: draftPoint[0], lng: draftPoint[1], coat, photo: coverPhoto, gallery };
       setCats((current) => [cat, ...current]); setSelected(cat); setFocusPosition([cat.lat, cat.lng]); setTab('map'); form.reset(); setDraftFiles([]); setDraftPhotos([]);
@@ -283,8 +290,13 @@ export default function Home() {
       const spottedAt = new Date().toISOString();
       const caption = galleryCaption.trim();
       const files = [galleryDraftFile];
-      const added = supabase && user ? await uploadFilesForCat(selected.id, files, uploader, caption) : (await filesToDataUrls(files)).map((url) => ({ id: crypto.randomUUID(), url, spottedAt, uploadedBy: uploader, caption }));
-      const updated = { ...selected, photo: selected.photo || added[0]?.url || DEFAULT_CAT_PHOTO, gallery: [...added, ...(selected.gallery ?? [])] };
+      const added = supabase && user ? await uploadFilesForCat(selected.id, files, uploader, caption) : (await filesToDataUrls(files)).map((url) => ({ id: crypto.randomUUID(), url, spottedAt, createdAt: spottedAt, uploadedBy: uploader, caption }));
+      const firstPhoto = selected.photo ?? added[0]?.url ?? null;
+      if (!selected.photo && firstPhoto && supabase && user) {
+        const { error } = await supabase.from('cats').update({ cover_photo_url: firstPhoto }).eq('id', selected.id);
+        if (error) throw error;
+      }
+      const updated = { ...selected, photo: firstPhoto, gallery: [...added, ...(selected.gallery ?? [])] };
       setSelected(updated); setCats((current) => current.map((cat) => cat.id === updated.id ? updated : cat)); closeGalleryComposer(); flash('폴라로이드 한 장을 갤러리에 추가했어요.');
     } catch { flash('사진을 올리지 못했어요. 잠시 후 다시 시도해 주세요.'); }
     finally { setGalleryUploading(false); }
@@ -422,14 +434,14 @@ export default function Home() {
         <header className="floating-header"><div className="brand-pill"><span className="mini-cat">=^･ω･^=</span><div><b>meow map</b><small>{hasSupabaseConfig ? 'PNU CAT MAP' : 'LOCAL PREVIEW'}</small></div></div><button className="count-pill" type="button" onClick={() => setTab('cats')}><span>{cats.length}</span> 마리</button></header>
         <div className="map-actions"><button type="button" onClick={locateMe} aria-label="사용자의 현재 위치로 지도 이동">⌖</button></div>
         {isChoosingLocation && <><div className="location-picker-tip"><small>LOCATION PICKER</small><b>{hasChosenLocation ? '이 위치가 맞나요?' : '고양이를 발견한 곳을 눌러주세요'}</b></div><div className="location-picker-actions"><button type="button" onClick={cancelLocationSelection}>취소</button><button type="button" disabled={!hasChosenLocation} onClick={() => openReport(draftPoint[0], draftPoint[1])}>이 위치로 등록하기 <span>↗</span></button></div></>}
-        {selected && tab === 'map' && <article className="selected-card is-clickable"><button className="card-profile-hit" type="button" onClick={() => { setEditingProfile(false); setTab('profile'); }} aria-label={`${selected.name} 프로필 보기`} /><button className="card-close" type="button" onClick={() => setSelected(null)} aria-label="상세 카드 닫기">×</button><img src={selected.photo} alt={`${selected.name} 사진`} /><div className="selected-copy"><div><span>최근 목격</span><small>{formatSeen(selected.spottedAt)}</small></div><h2>{selected.name}</h2><p>⌖ {selected.place}</p><button className="selected-gallery-link" type="button" onClick={() => { setGalleryDate(''); setTab('gallery'); }}>{selected.name}의 갤러리 <span>{selected.gallery?.length ?? 0}장</span></button></div><span className="profile-card-arrow" aria-hidden="true">›</span></article>}
+        {selected && tab === 'map' && <article className={`selected-card is-clickable ${selected.photo ? '' : 'no-photo'}`}><button className="card-profile-hit" type="button" onClick={() => { setEditingProfile(false); setTab('profile'); }} aria-label={`${selected.name} 프로필 보기`} /><button className="card-close" type="button" onClick={() => setSelected(null)} aria-label="상세 카드 닫기">×</button>{selected.photo && <img src={selected.photo} alt={`${selected.name} 사진`} />}<div className="selected-copy"><div><span>최근 목격</span><small>{formatSeen(selected.spottedAt)}</small></div><h2>{selected.name}</h2><p>⌖ {selected.place}</p><button className="selected-gallery-link" type="button" onClick={() => { setGalleryDate(''); setTab('gallery'); }}>{selected.name}의 갤러리 <span>{selected.gallery?.length ?? 0}장</span></button></div><span className="profile-card-arrow" aria-hidden="true">›</span></article>}
       </section>
 
-      {tab === 'cats' && <section className="overlay-panel cat-list-panel"><div className="panel-heading"><div><small>ALL CATS</small><h1>고양이 친구들</h1></div></div><label className="search-box"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="이름이나 장소로 찾아보세요" /></label><div className="cat-list">{filteredCats.map((cat) => <button key={cat.id} className="cat-row" type="button" onClick={() => chooseCat(cat)}><img src={cat.photo} alt="" /><span><b>{cat.name}</b><small>⌖ {cat.place}</small></span><i>{cat.gallery?.length ?? 0}장</i></button>)}</div></section>}
+      {tab === 'cats' && <section className="overlay-panel cat-list-panel"><div className="panel-heading"><div><small>ALL CATS</small><h1>고양이 친구들</h1></div></div><label className="search-box"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="이름이나 장소로 찾아보세요" /></label><div className="cat-list">{filteredCats.map((cat) => <button key={cat.id} className={`cat-row ${cat.photo ? '' : 'no-photo'}`} type="button" onClick={() => chooseCat(cat)}>{cat.photo && <img src={cat.photo} alt="" />}<span><b>{cat.name}</b><small>⌖ {cat.place}</small></span><i>{cat.gallery?.length ?? 0}장</i></button>)}</div></section>}
 
       {tab === 'gallery' && selected && <section className="overlay-panel gallery-panel">
         <div className="gallery-topbar"><button type="button" onClick={() => setTab('map')} aria-label="지도와 설명으로 돌아가기">‹</button><div><small>CAT GALLERY</small><h1>{selected.name}의 갤러리</h1></div><span>{selected.gallery?.length ?? 0}</span></div>
-        <div className="gallery-summary"><img src={selected.photo} alt="" /><div><b>{selected.name}의 하루들</b><p>⌖ {selected.place}</p></div></div>
+        <div className={`gallery-summary ${selected.photo ? '' : 'no-photo'}`}>{selected.photo && <img src={selected.photo} alt="" />}<div><b>{selected.name}의 하루들</b><p>⌖ {selected.place}</p></div></div>
         <button className="gallery-add-button" type="button" onClick={() => { setGalleryDraftFile(null); setGalleryDraftPreview(''); setGalleryCaption(''); setShowGalleryComposer(true); }}><span>＋</span> 사진 추가하기</button>
         {galleryGroups.length > 0 && <label className="gallery-calendar"><span>▦ 날짜로 이동</span><input type="date" value={galleryDate} min={galleryGroups.at(-1)?.[0]} max={galleryGroups[0]?.[0]} onChange={(event) => jumpToGalleryDate(event.target.value)} /></label>}
         <div className="gallery-days">{galleryGroups.map(([day, photos]) => <section className="gallery-day" id={`gallery-${day}`} key={day}><div className="date-divider"><b>{formatGalleryDate(day)}</b><span>{photos.length}장</span></div><div className="photo-grid">{photos.map((photo) => <button className="photo-tile" type="button" key={photo.id} onClick={() => setViewerPhoto(photo)}><img src={photo.url} alt={`${selected.name} ${formatGalleryDate(day)} 사진`} /></button>)}</div></section>)}{!galleryGroups.length && <div className="empty-gallery"><span>▧</span><b>아직 사진이 없어요</b><p>첫 번째 목격 사진을 남겨 주세요.</p></div>}</div>
@@ -450,11 +462,11 @@ export default function Home() {
 
       {viewerPhoto && selected && <section className="photo-viewer" role="dialog" aria-modal="true" aria-label={`${selected.name} 사진 크게 보기`}><button className="viewer-close" type="button" onClick={() => setViewerPhoto(null)} aria-label="사진 닫기">×</button><article className="polaroid-card"><div className="polaroid-image"><img src={viewerPhoto.url} alt={`${selected.name} 크게 보기`} /></div><div className="polaroid-caption"><small>{formatSeen(viewerPhoto.spottedAt)}</small><p>{viewerPhoto.caption || '아직 남겨진 설명이 없어요.'}</p><span>— {viewerPhoto.uploadedBy ?? '익명의 친구'}</span></div></article></section>}
 
-      {tab === 'profile' && selected && <section className="overlay-panel cat-profile-panel"><div className="panel-handle" /><div className="profile-panel-nav"><button type="button" onClick={() => setTab('map')} aria-label="지도와 설명으로 돌아가기">‹</button><span>프로필</span></div><div className="profile-hero"><img src={selected.photo} alt={`${selected.name} 프로필 사진`} /><div><small>CAT PROFILE</small><h1>{selected.name}</h1><p>⌖ {selected.place}</p></div></div>{editingProfile ? <div className="profile-editor"><div className="profile-section-title"><div><small>EDIT PROFILE</small><h2>프로필 내용 작성</h2></div><button type="button" onClick={() => setEditingProfile(false)}>취소</button></div><form onSubmit={saveCatProfile}><label><span>성격과 특징</span><textarea name="personality" rows={3} defaultValue={selected.personality} placeholder="예: 느긋하고 사람을 잘 따라요" /></label><label><span>좋아하는 것</span><input name="likes" defaultValue={selected.likes} placeholder="예: 햇빛, 참치 간식, 벤치 밑" /></label><label><span>자주 있는 장소</span><input name="favoriteSpot" defaultValue={selected.favoriteSpot} placeholder="예: 중앙도서관 앞 벤치" /></label><label><span>다가갈 때 주의할 점</span><textarea name="caution" rows={2} defaultValue={selected.caution} placeholder="예: 낮잠 잘 때는 만지지 않기" /></label><p>친구들이 함께 참고할 수 있는 정보만 적어 주세요.</p><button type="submit">{selected.name} 프로필 저장하기 <span>↗</span></button></form></div> : <div className="profile-view"><div className="profile-section-title"><div><small>OUR NOTES</small><h2>친구들이 알려준 {selected.name}</h2></div><span>공동 작성</span></div><dl className="profile-facts"><div><dt>성격과 특징</dt><dd>{selected.personality || '아직 적힌 내용이 없어요.'}</dd></div><div><dt>좋아하는 것</dt><dd>{selected.likes || '아직 적힌 내용이 없어요.'}</dd></div><div><dt>자주 있는 장소</dt><dd>{selected.favoriteSpot || '아직 적힌 내용이 없어요.'}</dd></div><div><dt>다가갈 때 주의할 점</dt><dd>{selected.caution || '아직 적힌 내용이 없어요.'}</dd></div></dl><button className="profile-edit-button" type="button" onClick={() => setEditingProfile(true)}>내용 추가·수정하기 <span>＋</span></button></div>}</section>}
+      {tab === 'profile' && selected && <section className="overlay-panel cat-profile-panel"><div className="panel-handle" /><div className="profile-panel-nav"><button type="button" onClick={() => setTab('map')} aria-label="지도와 설명으로 돌아가기">‹</button><span>프로필</span></div><div className={`profile-hero ${selected.photo ? '' : 'no-photo'}`}>{selected.photo && <img src={selected.photo} alt={`${selected.name} 프로필 사진`} />}<div><small>CAT PROFILE</small><h1>{selected.name}</h1><p>⌖ {selected.place}</p></div></div>{editingProfile ? <div className="profile-editor"><div className="profile-section-title"><div><small>EDIT PROFILE</small><h2>프로필 내용 작성</h2></div><button type="button" onClick={() => setEditingProfile(false)}>취소</button></div><form onSubmit={saveCatProfile}><label><span>성격과 특징</span><textarea name="personality" rows={3} defaultValue={selected.personality} placeholder="예: 느긋하고 사람을 잘 따라요" /></label><label><span>좋아하는 것</span><input name="likes" defaultValue={selected.likes} placeholder="예: 햇빛, 참치 간식, 벤치 밑" /></label><label><span>자주 있는 장소</span><input name="favoriteSpot" defaultValue={selected.favoriteSpot} placeholder="예: 중앙도서관 앞 벤치" /></label><label><span>다가갈 때 주의할 점</span><textarea name="caution" rows={2} defaultValue={selected.caution} placeholder="예: 낮잠 잘 때는 만지지 않기" /></label><p>친구들이 함께 참고할 수 있는 정보만 적어 주세요.</p><button type="submit">{selected.name} 프로필 저장하기 <span>↗</span></button></form></div> : <div className="profile-view"><div className="profile-section-title"><div><small>OUR NOTES</small><h2>친구들이 알려준 {selected.name}</h2></div><span>공동 작성</span></div><dl className="profile-facts"><div><dt>성격과 특징</dt><dd>{selected.personality || '아직 적힌 내용이 없어요.'}</dd></div><div><dt>좋아하는 것</dt><dd>{selected.likes || '아직 적힌 내용이 없어요.'}</dd></div><div><dt>자주 있는 장소</dt><dd>{selected.favoriteSpot || '아직 적힌 내용이 없어요.'}</dd></div><div><dt>다가갈 때 주의할 점</dt><dd>{selected.caution || '아직 적힌 내용이 없어요.'}</dd></div></dl><button className="profile-edit-button" type="button" onClick={() => setEditingProfile(true)}>내용 추가·수정하기 <span>＋</span></button></div>}</section>}
 
       {tab === 'report' && <section className="overlay-panel report-panel"><div className="panel-heading"><div><small>NEW SIGHTING</small><h1>새 고양이 발견!</h1></div></div><form onSubmit={handleSubmit}><button type="button" className={`photo-uploader ${draftPhotos.length ? 'has-photo' : ''}`} onClick={() => photoInput.current?.click()}>{draftPhotos.length ? <div className="upload-preview-grid">{draftPhotos.slice(0, 4).map((photo, index) => <img key={photo} src={photo} alt={`선택한 사진 ${index + 1}`} />)}{draftPhotos.length > 4 && <b>+{draftPhotos.length - 4}</b>}</div> : <><span>＋</span><b>고양이 사진 여러 장 추가</b><small>한 번에 최대 8장</small></>}</button><input ref={photoInput} hidden type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={handlePhotos} /><div className="field-row"><label><span>이름</span><input required name="name" placeholder="예: 치즈" /></label><label><span>발견 장소</span><input required name="place" placeholder="예: 도서관 뒤" /></label></div><label><span>고양이 털색</span><select required name="coat" defaultValue="orange"><option value="gray">회색 고등어</option><option value="orange">치즈</option><option value="calico">삼색이</option><option value="black">검정 / 턱시도</option><option value="white">흰색</option></select></label><label><span>발견한 사람</span><input name="spottedBy" placeholder="별명도 좋아요" /></label><label><span>특징이나 메모</span><textarea name="note" rows={3} placeholder="성격, 생김새, 자주 보이는 시간…" /></label><p className="location-confirm">● 선택한 지도 위치와 오늘 날짜가 함께 저장돼요</p><button className="save-button" disabled={saving} type="submit">{saving ? '등록하는 중…' : '지도와 갤러리에 등록하기'} <span>↗</span></button></form></section>}
 
-      {tab === 'mine' && <section className="overlay-panel about-panel record-panel"><div className="panel-heading"><div><small>MY RECORD</small><h1>내 기록</h1></div></div><div className="record-summary"><span>♧</span><div><b>{cats.length}마리</b><small>지금 지도에서 만나고 있어요</small></div><i>{cats.reduce((count, cat) => count + (cat.gallery?.length ?? 0), 0)} PHOTOS</i></div><h2 className="record-title">최근 고양이</h2><div className="cat-list">{cats.slice(0, 4).map((cat) => <button key={cat.id} className="cat-row" type="button" onClick={() => chooseCat(cat)}><img src={cat.photo} alt="" /><span><b>{cat.name}</b><small>⌖ {cat.place}</small></span><i>{formatSeen(cat.spottedAt)}</i></button>)}</div></section>}
+      {tab === 'mine' && <section className="overlay-panel about-panel record-panel"><div className="panel-heading"><div><small>MY RECORD</small><h1>내 기록</h1></div></div><div className="record-summary"><span>♧</span><div><b>{cats.length}마리</b><small>지금 지도에서 만나고 있어요</small></div><i>{cats.reduce((count, cat) => count + (cat.gallery?.length ?? 0), 0)} PHOTOS</i></div><h2 className="record-title">최근 고양이</h2><div className="cat-list">{cats.slice(0, 4).map((cat) => <button key={cat.id} className={`cat-row ${cat.photo ? '' : 'no-photo'}`} type="button" onClick={() => chooseCat(cat)}>{cat.photo && <img src={cat.photo} alt="" />}<span><b>{cat.name}</b><small>⌖ {cat.place}</small></span><i>{formatSeen(cat.spottedAt)}</i></button>)}</div></section>}
 
       {tab === 'myPage' && <section className="overlay-panel about-panel auth-panel my-page-panel"><div className="panel-heading"><div><small>MY PAGE</small><h1>마이페이지</h1></div></div><div className="my-profile-card"><div className="my-avatar">{myName.slice(0, 1)}</div><div><small>{hasSupabaseConfig ? 'VERIFIED MEMBER' : 'LOCAL PROFILE'}</small><h2>{myName}</h2><p>{user?.email || '이 기기에 저장되는 미리보기 프로필'}</p></div></div><form className="my-profile-form" onSubmit={saveMyProfile}><label><span>닉네임</span><input name="displayName" defaultValue={myName} placeholder="지도에서 사용할 이름" /></label><label><span>한 줄 소개</span><textarea name="bio" rows={3} defaultValue={myBio} placeholder="고양이 친구들에게 나를 소개해 주세요" /></label><button type="submit">프로필 저장하기 <span>↗</span></button></form>{user && <button className="my-logout" type="button" onClick={() => { setTab('map'); void supabase?.auth.signOut(); }}>로그아웃</button>}</section>}
 
