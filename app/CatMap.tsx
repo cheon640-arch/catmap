@@ -41,6 +41,7 @@ type Props = {
   onSelect: (cat: MapCat) => void;
   onMapClick: (lat: number, lng: number) => void;
   focusPosition?: [number, number] | null;
+  draftPosition?: [number, number] | null;
 };
 
 function MapEvents({ onMapClick }: Pick<Props, 'onMapClick'>) {
@@ -105,7 +106,7 @@ function CatMarkers({ cats, selectedId, onSelect }: Pick<Props, 'cats' | 'select
   ));
 }
 
-export default function CatMap({ cats, selectedId, onSelect, onMapClick, focusPosition }: Props) {
+export default function CatMap({ cats, selectedId, onSelect, onMapClick, focusPosition, draftPosition }: Props) {
   return (
     <MapContainer
       center={PNU_CENTER}
@@ -128,6 +129,7 @@ export default function CatMap({ cats, selectedId, onSelect, onMapClick, focusPo
         positions={PNU_CAMPUS}
         pathOptions={{ color: '#61609a', weight: 3, opacity: 0.9, fillColor: '#f4ed36', fillOpacity: 0.06, dashArray: '8 8', interactive: false }}
       />
+      {draftPosition && <Marker position={draftPosition} icon={L.divIcon({ className: 'draft-heart-wrap', iconSize: [40, 38], iconAnchor: [20, 25], html: '<div class="draft-heart-marker" aria-hidden="true"><span></span></div>' })} interactive={false} />}
       <CatMarkers cats={cats} selectedId={selectedId} onSelect={onSelect} />
     </MapContainer>
   );

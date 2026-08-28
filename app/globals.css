@@ -368,6 +368,33 @@ body, button, input, textarea {
 .location-picker-actions button { min-height: 44px; border: 2px solid var(--ink); border-radius: 5px; background: white; font: inherit; font-size: 12px; }
 .location-picker-actions button:last-child { background: var(--acid); }
 .location-picker-actions button:disabled { opacity: .45; }
+.draft-heart-wrap { background: transparent; border: 0; }
+.draft-heart-marker {
+  position: relative;
+  width: 40px;
+  height: 34px;
+  display: grid;
+  place-items: start center;
+  filter: drop-shadow(2px 3px 0 var(--ink));
+  animation: heart-pop .18s steps(2, end);
+}
+.draft-heart-marker span {
+  position: absolute;
+  top: 3px;
+  left: 8px;
+  width: 4px;
+  height: 4px;
+  background: #ff7fa4;
+  box-shadow:
+    4px 0 #ff7fa4, 16px 0 #ff7fa4, 20px 0 #ff7fa4,
+    -4px 4px #ff7fa4, 0 4px #ff7fa4, 4px 4px #ff7fa4, 8px 4px #ff7fa4, 12px 4px #ff7fa4, 16px 4px #ff7fa4, 20px 4px #ff7fa4, 24px 4px #ff7fa4,
+    -4px 8px #ff7fa4, 0 8px #ff7fa4, 4px 8px #ff7fa4, 8px 8px #ff7fa4, 12px 8px #ff7fa4, 16px 8px #ff7fa4, 20px 8px #ff7fa4, 24px 8px #ff7fa4,
+    0 12px #ff7fa4, 4px 12px #ff7fa4, 8px 12px #ff7fa4, 12px 12px #ff7fa4, 16px 12px #ff7fa4, 20px 12px #ff7fa4,
+    4px 16px #ff7fa4, 8px 16px #ff7fa4, 12px 16px #ff7fa4, 16px 16px #ff7fa4,
+    8px 20px #ff7fa4, 12px 20px #ff7fa4,
+    12px 24px #ff7fa4;
+}
+@keyframes heart-pop { from { transform: translateY(4px) scale(.7); } to { transform: translateY(0) scale(1); } }
 .map-hint {
   top: 91px;
   border: 2px solid var(--ink);

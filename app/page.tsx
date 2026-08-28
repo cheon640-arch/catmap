@@ -439,7 +439,7 @@ export default function Home() {
   return (
     <main className="app-shell">
       <section className="map-stage" aria-label="부산대학교 부산캠퍼스 고양이 위치 지도">
-        <CatMap cats={cats} selectedId={selected?.id ?? null} onSelect={isChoosingLocation ? () => undefined : setSelected} onMapClick={chooseDraftLocation} focusPosition={focusPosition} />
+        <CatMap cats={cats} selectedId={selected?.id ?? null} onSelect={isChoosingLocation ? () => undefined : setSelected} onMapClick={chooseDraftLocation} focusPosition={focusPosition} draftPosition={isChoosingLocation && hasChosenLocation ? draftPoint : null} />
         <header className="floating-header"><div className="brand-pill"><span className="mini-cat">=^･ω･^=</span><div><b>meow map</b><small>{hasSupabaseConfig ? 'PNU CAT MAP' : 'LOCAL PREVIEW'}</small></div></div><button className="count-pill" type="button" onClick={() => setTab('cats')}><span>{cats.length}</span> 마리</button></header>
         <div className="map-actions"><button type="button" onClick={locateMe} aria-label="사용자의 현재 위치로 지도 이동">⌖</button></div>
         {isChoosingLocation && <><div className="location-picker-tip"><small>LOCATION PICKER</small><b>{hasChosenLocation ? '이 위치가 맞나요?' : '고양이를 발견한 곳을 눌러주세요'}</b></div><div className="location-picker-actions"><button type="button" onClick={cancelLocationSelection}>취소</button><button type="button" disabled={!hasChosenLocation} onClick={() => openReport(draftPoint[0], draftPoint[1])}>이 위치로 등록하기 <span>↗</span></button></div></>}
