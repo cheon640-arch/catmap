@@ -89,6 +89,11 @@ export default function Home() {
   const [viewerPhoto, setViewerPhoto] = useState<CatPhoto | null>(null);
   const [galleryDate, setGalleryDate] = useState('');
   const [galleryCaption, setGalleryCaption] = useState('');
+  const [showGalleryComposer, setShowGalleryComposer] = useState(false);
+  const [galleryDraftFile, setGalleryDraftFile] = useState<File | null>(null);
+  const [galleryDraftPreview, setGalleryDraftPreview] = useState('');
+  const [isChoosingLocation, setIsChoosingLocation] = useState(false);
+  const [hasChosenLocation, setHasChosenLocation] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
   const photoInput = useRef<HTMLInputElement>(null);
   const galleryInput = useRef<HTMLInputElement>(null);
@@ -173,7 +178,27 @@ export default function Home() {
 
   const openReport = (lat = draftPoint[0], lng = draftPoint[1]) => {
     if (!isInsidePnuCampus(lat, lng)) return flash('부산대학교 부산캠퍼스 안의 고양이만 등록할 수 있어요.');
-    setDraftPoint([lat, lng]); setDraftPhotos([]); setDraftFiles([]); setSelected(null); setTab('report');
+    setDraftPoint([lat, lng]); setDraftPhotos([]); setDraftFiles([]); setSelected(null); setIsChoosingLocation(false); setHasChosenLocation(false); setTab('report');
+  };
+
+  const beginLocationSelection = () => {
+    setSelected(null);
+    setTab('map');
+    setIsChoosingLocation(true);
+    setHasChosenLocation(false);
+    flash('지도에서 고양이를 발견한 위치를 눌러 주세요.');
+  };
+
+  const chooseDraftLocation = (lat: number, lng: number) => {
+    if (!isChoosingLocation) return;
+    if (!isInsidePnuCampus(lat, lng)) return flash('부산대학교 부산캠퍼스 안에서 위치를 골라 주세요.');
+    setDraftPoint([lat, lng]);
+    setHasChosenLocation(true);
+  };
+
+  const cancelLocationSelection = () => {
+    setIsChoosingLocation(false);
+    setHasChosenLocation(false);
   };
 
   const handlePhotos = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -231,21 +256,38 @@ export default function Home() {
     finally { setSaving(false); }
   };
 
-  const handleGalleryUpload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files ?? []).slice(0, 12);
-    if (!selected || !files.length) return;
-    if (files.some((file) => file.size > 5_000_000)) return flash('사진은 한 장당 5MB 이하로 골라 주세요.');
+  const closeGalleryComposer = () => {
+    setShowGalleryComposer(false);
+    setGalleryDraftFile(null);
+    setGalleryDraftPreview('');
+    setGalleryCaption('');
+    if (galleryInput.current) galleryInput.current.value = '';
+  };
+
+  const handleGalleryPhotoPick = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5_000_000) { event.target.value = ''; return flash('사진은 5MB 이하로 골라 주세요.'); }
+    const [preview] = await filesToDataUrls([file]);
+    setGalleryDraftFile(file);
+    setGalleryDraftPreview(preview);
+  };
+
+  const handleGalleryUpload = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selected || !galleryDraftFile) return flash('먼저 폴라로이드에 사진을 골라 주세요.');
     if (hasSupabaseConfig && !user) { flash('사진을 올리려면 먼저 로그인해 주세요.'); setTab('myPage'); return; }
     setGalleryUploading(true);
     try {
       const uploader = user?.email?.split('@')[0] || '나';
       const spottedAt = new Date().toISOString();
       const caption = galleryCaption.trim();
+      const files = [galleryDraftFile];
       const added = supabase && user ? await uploadFilesForCat(selected.id, files, uploader, caption) : (await filesToDataUrls(files)).map((url) => ({ id: crypto.randomUUID(), url, spottedAt, uploadedBy: uploader, caption }));
       const updated = { ...selected, photo: selected.photo || added[0]?.url || DEFAULT_CAT_PHOTO, gallery: [...added, ...(selected.gallery ?? [])] };
-      setSelected(updated); setCats((current) => current.map((cat) => cat.id === updated.id ? updated : cat)); setGalleryCaption(''); flash(`사진 ${added.length}장을 갤러리에 추가했어요.`);
+      setSelected(updated); setCats((current) => current.map((cat) => cat.id === updated.id ? updated : cat)); closeGalleryComposer(); flash('폴라로이드 한 장을 갤러리에 추가했어요.');
     } catch { flash('사진을 올리지 못했어요. 잠시 후 다시 시도해 주세요.'); }
-    finally { setGalleryUploading(false); event.target.value = ''; }
+    finally { setGalleryUploading(false); }
   };
 
   const handleAuth = async (event: FormEvent<HTMLFormElement>) => {
@@ -339,13 +381,13 @@ export default function Home() {
     if (!navigator.geolocation) return flash('이 기기에서는 현재 위치를 사용할 수 없어요.');
     navigator.geolocation.getCurrentPosition(({ coords }) => {
       const next: [number, number] = [coords.latitude, coords.longitude]; setFocusPosition(next);
-      if (isInsidePnuCampus(coords.latitude, coords.longitude)) { setDraftPoint(next); flash('현재 위치로 이동했어요.'); }
+      if (isInsidePnuCampus(coords.latitude, coords.longitude)) { setDraftPoint(next); if (isChoosingLocation) setHasChosenLocation(true); flash('현재 위치로 이동했어요.'); }
       else flash('현재 위치로 이동했어요. 등록은 부산캠퍼스 안에서만 가능해요.');
     }, () => flash('위치 권한을 허용해 주세요.'), { enableHighAccuracy: true, timeout: 8000 });
   };
 
   const locateMe = () => { if (localStorage.getItem('nyangdo-location-choice') !== 'granted') return setShowLocationConsent(true); requestCurrentLocation(); };
-  const chooseCat = (cat: MapCat) => { setSelected(cat); setFocusPosition([cat.lat, cat.lng]); setTab('map'); };
+  const chooseCat = (cat: MapCat) => { setIsChoosingLocation(false); setHasChosenLocation(false); setSelected(cat); setFocusPosition([cat.lat, cat.lng]); setTab('map'); };
 
   if (hasSupabaseConfig && !authReady) {
     return <main className="app-shell auth-shell"><section className="auth-loading" aria-live="polite"><span className="auth-pixel-cat">=^･ω･^=</span><p>고양이 지도를 준비하고 있어요…</p></section></main>;
@@ -376,15 +418,35 @@ export default function Home() {
   return (
     <main className="app-shell">
       <section className="map-stage" aria-label="부산대학교 부산캠퍼스 고양이 위치 지도">
-        <CatMap cats={cats} selectedId={selected?.id ?? null} onSelect={setSelected} onMapClick={openReport} focusPosition={focusPosition} />
+        <CatMap cats={cats} selectedId={selected?.id ?? null} onSelect={isChoosingLocation ? () => undefined : setSelected} onMapClick={chooseDraftLocation} focusPosition={focusPosition} draftPosition={isChoosingLocation && hasChosenLocation ? draftPoint : null} />
         <header className="floating-header"><div className="brand-pill"><span className="mini-cat">=^･ω･^=</span><div><b>meow map</b><small>{hasSupabaseConfig ? 'PNU CAT MAP' : 'LOCAL PREVIEW'}</small></div></div><button className="count-pill" type="button" onClick={() => setTab('cats')}><span>{cats.length}</span> 마리</button></header>
         <div className="map-actions"><button type="button" onClick={locateMe} aria-label="사용자의 현재 위치로 지도 이동">⌖</button></div>
+        {isChoosingLocation && <><div className="location-picker-tip"><small>LOCATION PICKER</small><b>{hasChosenLocation ? '이 위치가 맞나요?' : '고양이를 발견한 곳을 눌러주세요'}</b></div><div className="location-picker-actions"><button type="button" onClick={cancelLocationSelection}>취소</button><button type="button" disabled={!hasChosenLocation} onClick={() => openReport(draftPoint[0], draftPoint[1])}>이 위치로 등록하기 <span>↗</span></button></div></>}
         {selected && tab === 'map' && <article className="selected-card is-clickable"><button className="card-profile-hit" type="button" onClick={() => { setEditingProfile(false); setTab('profile'); }} aria-label={`${selected.name} 프로필 보기`} /><button className="card-close" type="button" onClick={() => setSelected(null)} aria-label="상세 카드 닫기">×</button><img src={selected.photo} alt={`${selected.name} 사진`} /><div className="selected-copy"><div><span>최근 목격</span><small>{formatSeen(selected.spottedAt)}</small></div><h2>{selected.name}</h2><p>⌖ {selected.place}</p><button className="selected-gallery-link" type="button" onClick={() => { setGalleryDate(''); setTab('gallery'); }}>{selected.name}의 갤러리 <span>{selected.gallery?.length ?? 0}장</span></button></div><span className="profile-card-arrow" aria-hidden="true">›</span></article>}
       </section>
 
       {tab === 'cats' && <section className="overlay-panel cat-list-panel"><div className="panel-heading"><div><small>ALL CATS</small><h1>고양이 친구들</h1></div></div><label className="search-box"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="이름이나 장소로 찾아보세요" /></label><div className="cat-list">{filteredCats.map((cat) => <button key={cat.id} className="cat-row" type="button" onClick={() => chooseCat(cat)}><img src={cat.photo} alt="" /><span><b>{cat.name}</b><small>⌖ {cat.place}</small></span><i>{cat.gallery?.length ?? 0}장</i></button>)}</div></section>}
 
-      {tab === 'gallery' && selected && <section className="overlay-panel gallery-panel"><div className="gallery-topbar"><button type="button" onClick={() => setTab('map')} aria-label="지도와 설명으로 돌아가기">‹</button><div><small>CAT GALLERY</small><h1>{selected.name}의 갤러리</h1></div><span>{selected.gallery?.length ?? 0}</span></div><div className="gallery-summary"><img src={selected.photo} alt="" /><div><b>{selected.name}의 하루들</b><p>⌖ {selected.place}</p></div><input ref={galleryInput} hidden type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={handleGalleryUpload} /><button type="button" disabled={galleryUploading} onClick={() => galleryInput.current?.click()} aria-label="사진 추가">＋</button></div><label className="gallery-caption-input"><span>사진 설명</span><input value={galleryCaption} onChange={(event) => setGalleryCaption(event.target.value)} placeholder="예: 도서관 앞에서 낮잠 자는 중" /></label>{galleryGroups.length > 0 && <label className="gallery-calendar"><span>▦ 날짜로 이동</span><input type="date" value={galleryDate} min={galleryGroups.at(-1)?.[0]} max={galleryGroups[0]?.[0]} onChange={(event) => jumpToGalleryDate(event.target.value)} /></label>}<div className="gallery-days">{galleryGroups.map(([day, photos]) => <section className="gallery-day" id={`gallery-${day}`} key={day}><div className="date-divider"><b>{formatGalleryDate(day)}</b><span>{photos.length}장</span></div><div className="photo-grid">{photos.map((photo) => <button className="photo-tile" type="button" key={photo.id} onClick={() => setViewerPhoto(photo)}><img src={photo.url} alt={`${selected.name} ${formatGalleryDate(day)} 사진`} /></button>)}</div></section>)}{!galleryGroups.length && <div className="empty-gallery"><span>▧</span><b>아직 사진이 없어요</b><p>첫 번째 목격 사진을 남겨 주세요.</p></div>}</div></section>}
+      {tab === 'gallery' && selected && <section className="overlay-panel gallery-panel">
+        <div className="gallery-topbar"><button type="button" onClick={() => setTab('map')} aria-label="지도와 설명으로 돌아가기">‹</button><div><small>CAT GALLERY</small><h1>{selected.name}의 갤러리</h1></div><span>{selected.gallery?.length ?? 0}</span></div>
+        <div className="gallery-summary"><img src={selected.photo} alt="" /><div><b>{selected.name}의 하루들</b><p>⌖ {selected.place}</p></div></div>
+        <button className="gallery-add-button" type="button" onClick={() => { setGalleryDraftFile(null); setGalleryDraftPreview(''); setGalleryCaption(''); setShowGalleryComposer(true); }}><span>＋</span> 사진 추가하기</button>
+        {galleryGroups.length > 0 && <label className="gallery-calendar"><span>▦ 날짜로 이동</span><input type="date" value={galleryDate} min={galleryGroups.at(-1)?.[0]} max={galleryGroups[0]?.[0]} onChange={(event) => jumpToGalleryDate(event.target.value)} /></label>}
+        <div className="gallery-days">{galleryGroups.map(([day, photos]) => <section className="gallery-day" id={`gallery-${day}`} key={day}><div className="date-divider"><b>{formatGalleryDate(day)}</b><span>{photos.length}장</span></div><div className="photo-grid">{photos.map((photo) => <button className="photo-tile" type="button" key={photo.id} onClick={() => setViewerPhoto(photo)}><img src={photo.url} alt={`${selected.name} ${formatGalleryDate(day)} 사진`} /></button>)}</div></section>)}{!galleryGroups.length && <div className="empty-gallery"><span>▧</span><b>아직 사진이 없어요</b><p>첫 번째 목격 사진을 남겨 주세요.</p></div>}</div>
+        {showGalleryComposer && <section className="gallery-upload-sheet" role="dialog" aria-modal="true" aria-labelledby="gallery-upload-title">
+          <div className="gallery-upload-topbar"><button type="button" onClick={closeGalleryComposer} aria-label="사진 추가 취소">‹</button><div><small>NEW POLAROID</small><h2 id="gallery-upload-title">사진 추가하기</h2></div></div>
+          <form className="gallery-polaroid-form" onSubmit={handleGalleryUpload}>
+            <input ref={galleryInput} hidden type="file" accept="image/jpeg,image/png,image/webp" onChange={handleGalleryPhotoPick} />
+            <div className="upload-polaroid">
+              <button className="upload-polaroid-photo" type="button" onClick={() => galleryInput.current?.click()}>
+                {galleryDraftPreview ? <img src={galleryDraftPreview} alt="추가할 사진 미리보기" /> : <span><b>＋</b>사진을 눌러 추가해 주세요<small>JPG · PNG · WEBP / 최대 5MB</small></span>}
+              </button>
+              <label className="upload-polaroid-note"><span>사진 설명</span><textarea rows={3} value={galleryCaption} onChange={(event) => setGalleryCaption(event.target.value)} placeholder="예: 도서관 앞에서 낮잠 자는 중" /></label>
+            </div>
+            <button className="gallery-upload-submit" disabled={galleryUploading || !galleryDraftFile} type="submit">{galleryUploading ? '올리는 중…' : `${selected.name}의 갤러리에 추가하기`} <span>↗</span></button>
+          </form>
+        </section>}
+      </section>}
 
       {viewerPhoto && selected && <section className="photo-viewer" role="dialog" aria-modal="true" aria-label={`${selected.name} 사진 크게 보기`}><button className="viewer-close" type="button" onClick={() => setViewerPhoto(null)} aria-label="사진 닫기">×</button><article className="polaroid-card"><div className="polaroid-image"><img src={viewerPhoto.url} alt={`${selected.name} 크게 보기`} /></div><div className="polaroid-caption"><small>{formatSeen(viewerPhoto.spottedAt)}</small><p>{viewerPhoto.caption || '아직 남겨진 설명이 없어요.'}</p><span>— {viewerPhoto.uploadedBy ?? '익명의 친구'}</span></div></article></section>}
 
@@ -398,7 +460,7 @@ export default function Home() {
 
       {showLocationConsent && <section className="consent-backdrop" role="dialog" aria-modal="true" aria-labelledby="location-consent-title"><div className="consent-card"><div className="consent-icon" aria-hidden="true">⌖</div><small>LOCATION INFO</small><h2 id="location-consent-title">내 주변 고양이를<br />찾아볼까요?</h2><p>현재 위치로 지도를 이동합니다. 위치는 저장하지 않으며, 고양이 등록은 부산캠퍼스 안에서만 가능해요.</p><div className="consent-points"><span><b>01</b> 지도 중심 이동에만 사용</span><span><b>02</b> 언제든 기기 설정에서 변경</span></div><button className="consent-accept" type="button" onClick={() => { localStorage.setItem('nyangdo-location-choice', 'granted'); setShowLocationConsent(false); requestCurrentLocation(); }}>동의하고 위치 보기 <span>↗</span></button><button className="consent-later" type="button" onClick={() => { localStorage.setItem('nyangdo-location-choice', 'later'); setShowLocationConsent(false); }}>나중에 할게요</button></div></section>}
 
-      <nav className="bottom-nav" aria-label="하단 메뉴"><button className={tab === 'map' ? 'active' : ''} type="button" onClick={() => setTab('map')}><span>⌖</span><small>지도</small></button><button className={tab === 'cats' ? 'active' : ''} type="button" onClick={() => setTab('cats')}><span>♧</span><small>고양이</small></button><button className="add-tab" type="button" onClick={() => openReport()} aria-label="새 고양이 등록"><span>＋</span></button><button className={tab === 'mine' ? 'active' : ''} type="button" onClick={() => setTab('mine')}><span>♡</span><small>내 기록</small></button><button className={tab === 'myPage' ? 'active' : ''} type="button" onClick={() => setTab('myPage')}><span>♙</span><small>마이페이지</small></button></nav>
+      <nav className="bottom-nav" aria-label="하단 메뉴"><button className={tab === 'map' ? 'active' : ''} type="button" onClick={() => { cancelLocationSelection(); setTab('map'); }}><span>⌖</span><small>지도</small></button><button className={tab === 'cats' ? 'active' : ''} type="button" onClick={() => { cancelLocationSelection(); setTab('cats'); }}><span>♧</span><small>고양이</small></button><button className="add-tab" type="button" onClick={beginLocationSelection} aria-label="새 고양이 위치 선택"><span>＋</span></button><button className={tab === 'mine' ? 'active' : ''} type="button" onClick={() => { cancelLocationSelection(); setTab('mine'); }}><span>♡</span><small>내 기록</small></button><button className={tab === 'myPage' ? 'active' : ''} type="button" onClick={() => { cancelLocationSelection(); setTab('myPage'); }}><span>♙</span><small>마이페이지</small></button></nav>
       {notice && <div className="toast" role="status">{notice}</div>}
     </main>
   );

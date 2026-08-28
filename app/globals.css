@@ -330,6 +330,46 @@ body, button, input, textarea {
   box-shadow: 3px 3px 0 var(--ink);
 }
 .map-actions button:hover { background: var(--acid); color: var(--ink); transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
+.location-picker-tip {
+  position: absolute;
+  z-index: 520;
+  top: 90px;
+  left: 50%;
+  width: min(calc(100% - 130px), 300px);
+  display: grid;
+  gap: 4px;
+  padding: 10px 13px;
+  border: 2px solid var(--ink);
+  border-radius: 6px;
+  background: var(--paper);
+  box-shadow: 3px 3px 0 var(--ink);
+  transform: translateX(-50%);
+  text-align: center;
+  pointer-events: none;
+}
+.location-picker-tip small { font-size: 12px; letter-spacing: .1em; }
+.location-picker-tip b { font-size: 13px; }
+.location-picker-actions {
+  position: absolute;
+  z-index: 530;
+  right: 14px;
+  bottom: calc(92px + env(safe-area-inset-bottom));
+  left: 14px;
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 8px;
+  padding: 9px;
+  border: 2px solid var(--ink);
+  border-radius: 7px;
+  background: var(--paper);
+  box-shadow: 5px 5px 0 var(--ink);
+}
+.location-picker-actions button { min-height: 44px; border: 2px solid var(--ink); border-radius: 5px; background: white; font: inherit; font-size: 12px; }
+.location-picker-actions button:last-child { background: var(--acid); }
+.location-picker-actions button:disabled { opacity: .45; }
+.draft-location-wrap { background: transparent; border: 0; }
+.draft-location-pin { position: relative; width: 38px; height: 38px; display: grid; place-items: center; border: 3px solid var(--ink); border-radius: 6px; background: var(--acid); box-shadow: 3px 3px 0 var(--ink); color: var(--ink); font-size: 23px; }
+.draft-location-pin::after { content: ""; position: absolute; left: 12px; bottom: -9px; width: 12px; height: 12px; border-right: 3px solid var(--ink); border-bottom: 3px solid var(--ink); background: var(--acid); transform: rotate(45deg); }
 .map-hint {
   top: 91px;
   border: 2px solid var(--ink);
@@ -901,11 +941,13 @@ body, button, input, textarea {
 .gallery-topbar small { font-size: 12px; letter-spacing: .12em; }
 .gallery-topbar h1 { margin: 2px 0 0; font-size: 17px; line-height: 1; }
 .gallery-topbar > span { display: grid; place-items: center; width: 34px; height: 34px; border: 2px solid var(--ink); border-radius: 50%; background: var(--pink); font-size: 12px; }
-.gallery-summary { display: grid; grid-template-columns: 52px 1fr 42px; align-items: center; gap: 10px; margin-bottom: 10px; padding: 8px; border: 2px solid var(--ink); border-radius: 6px; background: var(--matcha); }
+.gallery-summary { display: grid; grid-template-columns: 52px 1fr; align-items: center; gap: 10px; margin-bottom: 10px; padding: 8px; border: 2px solid var(--ink); border-radius: 6px; background: var(--matcha); }
 .gallery-summary > img { width: 52px; height: 52px; object-fit: cover; border: 2px solid var(--ink); border-radius: 4px; }
 .gallery-summary b { font-size: 12px; }
 .gallery-summary p { margin: 5px 0 0; color: var(--muted); font-size: 12px; }
-.gallery-summary > button { width: 38px; height: 38px; border: 2px solid var(--ink); border-radius: 5px; background: var(--acid); box-shadow: 2px 2px 0 var(--ink); font: inherit; font-size: 21px; }
+.gallery-add-button { width: 100%; min-height: 45px; display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 12px; border: 2px solid var(--ink); border-radius: 6px; background: var(--acid); box-shadow: 3px 3px 0 var(--ink); font: inherit; font-size: 12px; }
+.gallery-add-button span { font-size: 20px; line-height: 1; }
+.gallery-add-button:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
 .gallery-date-nav {
   position: sticky;
   z-index: 11;
@@ -952,7 +994,7 @@ body, button, input, textarea {
 @media (max-width: 350px) {
   .gallery-topbar h1 { font-size: 15px; }
   .album-grid { gap: 10px 7px; }
-  .gallery-summary { grid-template-columns: 46px 1fr 38px; }
+  .gallery-summary { grid-template-columns: 46px 1fr; }
   .gallery-summary > img { width: 46px; height: 46px; }
 }
 
@@ -1013,10 +1055,42 @@ body, button, input, textarea {
   font-size: 12px;
 }
 
-.gallery-caption-input { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 9px; margin-bottom: 10px; }
-.gallery-caption-input > span { font-size: 12px; white-space: nowrap; }
-.gallery-caption-input input { min-width: 0; width: 100%; min-height: 36px; padding: 0 10px; border: 2px solid var(--ink); border-radius: 5px; background: white; font: inherit; font-size: 12px; }
-.gallery-caption-input input:focus { outline: 0; box-shadow: 2px 2px 0 var(--acid); }
+.gallery-upload-sheet {
+  position: absolute;
+  z-index: 40;
+  inset: 0;
+  overflow-y: auto;
+  padding: 12px 18px 34px;
+  background: var(--paper);
+}
+.gallery-upload-topbar { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+.gallery-upload-topbar > button { width: 38px; height: 38px; display: grid; place-items: center; padding: 0 0 3px; border: 2px solid var(--ink); border-radius: 5px; background: white; box-shadow: 2px 2px 0 var(--ink); font: inherit; font-size: 24px; }
+.gallery-upload-topbar small { font-size: 12px; letter-spacing: .12em; }
+.gallery-upload-topbar h2 { margin: 3px 0 0; font-size: 20px; }
+.gallery-polaroid-form { display: grid; gap: 24px; }
+.upload-polaroid {
+  position: relative;
+  width: min(100%, 350px);
+  justify-self: center;
+  padding: 12px 12px 0;
+  border: 2px solid var(--ink);
+  background: #fffdf7;
+  box-shadow: 8px 9px 0 var(--ink);
+  transform: rotate(-1deg);
+}
+.upload-polaroid::before { content: ""; position: absolute; z-index: 2; left: 50%; top: -14px; width: 82px; height: 25px; border: 1px solid rgba(26, 26, 26, .3); background: rgba(244, 237, 54, .72); transform: translateX(-50%) rotate(2deg); pointer-events: none; }
+.upload-polaroid-photo { width: 100%; aspect-ratio: 1; display: grid; place-items: center; padding: 0; overflow: hidden; border: 2px solid var(--ink); background: #ded9d1; color: var(--ink); font: inherit; }
+.upload-polaroid-photo img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.upload-polaroid-photo > span { display: grid; justify-items: center; gap: 8px; padding: 22px; line-height: 1.55; }
+.upload-polaroid-photo > span b { width: 48px; height: 48px; display: grid; place-items: center; border: 2px solid var(--ink); border-radius: 50%; background: var(--acid); box-shadow: 2px 2px 0 var(--ink); font-size: 28px; }
+.upload-polaroid-photo > span small { color: var(--muted); font-size: 12px; }
+.upload-polaroid-note { min-height: 150px; display: grid; align-content: center; gap: 8px; padding: 16px 7px 20px; }
+.upload-polaroid-note > span { font-size: 12px; }
+.upload-polaroid-note textarea { width: 100%; padding: 11px; border: 2px solid var(--ink); border-radius: 5px; outline: 0; background: #fffaf0; font: inherit; font-size: 13px; line-height: 1.55; resize: vertical; }
+.upload-polaroid-note textarea:focus { box-shadow: 3px 3px 0 var(--pink); }
+.gallery-upload-submit { min-height: 50px; border: 2px solid var(--ink); border-radius: 6px; background: var(--acid); box-shadow: 4px 4px 0 var(--ink); font: inherit; font-size: 12px; }
+.gallery-upload-submit span { margin-left: 12px; font-size: 18px; }
+.gallery-upload-submit:disabled { cursor: not-allowed; opacity: .48; }
 
 .photo-viewer {
   display: grid;
