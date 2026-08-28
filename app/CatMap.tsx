@@ -110,13 +110,15 @@ export default function CatMap({ cats, selectedId, onSelect, onMapClick, focusPo
       center={PNU_CENTER}
       zoom={16}
       minZoom={10}
-      maxZoom={19}
+      maxZoom={18}
       className="leaflet-map"
       zoomControl={false}
       attributionControl
     >
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        maxNativeZoom={18}
+        maxZoom={18}
         url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       <MapEvents onMapClick={onMapClick} />

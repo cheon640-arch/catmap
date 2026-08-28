@@ -356,19 +356,6 @@ body, button, input, textarea {
 }
 .campus-stamp b { font-size: 13px; }
 .campus-stamp small { font-family: Consolas, monospace; font-size: 12px; letter-spacing: .13em; }
-.map-doodle {
-  position: absolute;
-  z-index: 450;
-  display: grid;
-  place-items: center;
-  border: 2px solid var(--ink);
-  background: var(--pink);
-  color: var(--ink);
-  pointer-events: none;
-}
-.doodle-one { left: 33px; bottom: 190px; width: 39px; height: 39px; border-radius: 50%; transform: rotate(12deg); font-size: 21px; }
-.doodle-two { right: 30px; bottom: 278px; width: 48px; height: 30px; border-radius: 50%; background: var(--matcha); transform: rotate(-9deg); font-size: 22px; }
-
 .cat-photo-pin {
   border: 3px solid var(--ink);
   background: var(--pin);
