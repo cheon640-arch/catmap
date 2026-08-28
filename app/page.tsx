@@ -356,7 +356,7 @@ export default function Home() {
       <main className="app-shell auth-shell">
         <section className="auth-gate" aria-labelledby="auth-title">
           <div className="auth-shape auth-shape-one" aria-hidden="true" /><div className="auth-shape auth-shape-two" aria-hidden="true" />
-          <header className="auth-brand"><span className="auth-mascot" aria-hidden="true"><i>• ᴗ •</i></span><h1 id="auth-title">냥도</h1><p>부산대 고양이들의 오늘을<br />친구들과 함께 기록해요</p></header>
+          <header className="auth-brand"><span className="auth-mascot" aria-hidden="true"><i>• ᴗ •</i></span><h1 id="auth-title">meow map</h1><p>부산대 고양이들의 오늘을<br />친구들과 함께 기록해요</p></header>
           <div className="auth-card">
             {authMessage ? <div className="auth-mail-sent" role="status"><span>✉</span><b>인증 메일을 확인해 주세요</b><p>{authMessage}</p><button type="button" onClick={() => { setAuthMode('login'); setAuthMessage(''); }}>인증 후 로그인하기</button></div> : <form className="auth-form" onSubmit={handleAuth}>
               {authMode === 'signup' && <label className="auth-field"><span aria-hidden="true">♙</span><input required name="displayName" autoComplete="name" aria-label="닉네임" placeholder="닉네임" /></label>}
@@ -377,7 +377,7 @@ export default function Home() {
     <main className="app-shell">
       <section className="map-stage" aria-label="부산대학교 부산캠퍼스 고양이 위치 지도">
         <CatMap cats={cats} selectedId={selected?.id ?? null} onSelect={setSelected} onMapClick={openReport} focusPosition={focusPosition} />
-        <header className="floating-header"><div className="brand-pill"><span className="mini-cat">=^･ω･^=</span><div><b>부산대 고양이 지도</b><small>{hasSupabaseConfig ? 'LIVE CAMPUS MAP' : 'LOCAL PREVIEW'}</small></div></div><button className="count-pill" type="button" onClick={() => setTab('cats')}><span>{cats.length}</span> 마리</button></header>
+        <header className="floating-header"><div className="brand-pill"><span className="mini-cat">=^･ω･^=</span><div><b>meow map</b><small>{hasSupabaseConfig ? 'PNU CAT MAP' : 'LOCAL PREVIEW'}</small></div></div><button className="count-pill" type="button" onClick={() => setTab('cats')}><span>{cats.length}</span> 마리</button></header>
         <div className="map-actions"><button type="button" onClick={locateMe} aria-label="사용자의 현재 위치로 지도 이동">⌖</button></div>
         {selected && tab === 'map' && <article className="selected-card is-clickable"><button className="card-profile-hit" type="button" onClick={() => { setEditingProfile(false); setTab('profile'); }} aria-label={`${selected.name} 프로필 보기`} /><button className="card-close" type="button" onClick={() => setSelected(null)} aria-label="상세 카드 닫기">×</button><img src={selected.photo} alt={`${selected.name} 사진`} /><div className="selected-copy"><div><span>최근 목격</span><small>{formatSeen(selected.spottedAt)}</small></div><h2>{selected.name}</h2><p>⌖ {selected.place}</p><button className="selected-gallery-link" type="button" onClick={() => { setGalleryDate(''); setTab('gallery'); }}>{selected.name}의 갤러리 <span>{selected.gallery?.length ?? 0}장</span></button></div><span className="profile-card-arrow" aria-hidden="true">›</span></article>}
       </section>

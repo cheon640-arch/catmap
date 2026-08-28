@@ -1,4 +1,4 @@
--- Run once in Supabase SQL Editor for an existing Nyangdo database.
+-- Run once in Supabase SQL Editor for an existing meow map database.
 revoke all on table public.cats from anon, authenticated;
 revoke all on table public.cat_photos from anon, authenticated;
 
