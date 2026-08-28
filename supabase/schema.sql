@@ -42,6 +42,15 @@ create index if not exists idx_cat_photos_cat_spotted on public.cat_photos(cat_i
 alter table public.cats enable row level security;
 alter table public.cat_photos enable row level security;
 
+-- Postgres grants and RLS policies are separate checks. Keep public reads open,
+-- while allowing writes only for users with a verified Supabase session.
+revoke all on table public.cats from anon, authenticated;
+revoke all on table public.cat_photos from anon, authenticated;
+grant usage on schema public to anon, authenticated;
+grant select on table public.cats, public.cat_photos to anon, authenticated;
+grant insert, update on table public.cats to authenticated;
+grant insert on table public.cat_photos to authenticated;
+
 drop policy if exists "cats are readable by everyone" on public.cats;
 create policy "cats are readable by everyone" on public.cats for select using (true);
 drop policy if exists "signed in users create cats" on public.cats;

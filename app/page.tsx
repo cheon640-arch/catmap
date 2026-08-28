@@ -270,6 +270,7 @@ export default function Home() {
           options: { emailRedirectTo: window.location.origin, data: { display_name: displayName || email.split('@')[0] } },
         });
         if (error) throw error;
+        if (signedUp.user && signedUp.user.identities?.length === 0) throw new Error('already registered');
         if (!signedUp.session) {
           setAuthMessage(`${email}로 인증 메일을 보냈어요. 메일 속 링크를 누르면 가입이 완료돼요.`);
           form.reset();
@@ -282,6 +283,7 @@ export default function Home() {
       const message = error instanceof Error ? error.message : '';
       if (/invalid login credentials/i.test(message)) setAuthError('이메일이나 비밀번호가 맞지 않아요.');
       else if (/email not confirmed/i.test(message)) setAuthError('메일함에서 이메일 인증을 먼저 완료해 주세요.');
+      else if (/email address not authorized/i.test(message)) setAuthError('현재 Supabase 기본 메일은 프로젝트 관리자 이메일에만 인증 메일을 보낼 수 있어요.');
       else if (/already registered|already exists/i.test(message)) setAuthError('이미 가입된 이메일이에요. 로그인해 주세요.');
       else setAuthError(message || '처리하지 못했어요. 잠시 후 다시 시도해 주세요.');
     } finally {
